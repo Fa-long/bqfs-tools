@@ -3,10 +3,15 @@
 use warnings;
 use strict;
 use autodie;
+use Getopt::Long;
 use 5.010;
 
 my $line_num = 0;
-my $line = 1;
+my $line;
+my $input_file;
+my $output_file;
+my $array_name = "bqfs_image";
+
 # Remove both leading and trailing whitespace
 sub trim
 {
@@ -31,6 +36,8 @@ sub output_title
  	say  "*          DO NOT MODIFY THIS FILE DIRECTLY                                  *";
 	say  "*****************************************************************************/";
 	say  "";
+	say  "//this file is generated from $input_file at ".localtime;
+	say  "";
 	select STDOUT;
 }
 
@@ -47,14 +54,14 @@ sub output_header
 
 sub output_bqfs_img_head
 {
-	say OUTPUTFILE "const bqfs_cmd_t bqfs_image[] = {";
+	say OUTPUTFILE "const bqfs_cmd_t ".$array_name."[] = {";
 }
 
 sub output_bqfs_img_tail
 {
 	select OUTPUTFILE;
 	say  "};";
-	say  "//end of const bqfs_cmd_t bqfs_image[]";
+	say  "//end of const bqfs_cmd_t ".$array_name."[]";
 	say  "#endif";
 	select STDOUT;
 }
@@ -125,7 +132,7 @@ sub output_bqfs_cmd_compare
 		else{#last one
 			printf  "0x$data";
 		}
-		$i = $i + 1;
+		$i++;
 	}
 	printf  "}},\n";
 	printf  "\t\t.data_len\t= $i,\n";
@@ -155,30 +162,55 @@ sub output_bqfs_cmd_wait
 
 }
 
-
-
-if(@ARGV < 2)
+sub parse_argument
 {
-	die "Usange:\n $0 <input file> <output file>\n";
+	GetOptions(
+		'line!'		=> \$line,
+		'input:s'	=> \$input_file,
+		'output:s'	=> \$output_file,
+		'name:s'	=> \$array_name,
+	);
+	if(!$output_file){
+		$output_file = $input_file."\.h";
+	}
+
+	if($input_file){
+		return 1;
+	}
+	return 0;
+		
 }
 
-open INPUTFILE, '<', $ARGV[0];
-open OUTPUTFILE, '>', $ARGV[1];
 
-&output_title;
-&output_header;
+#main function
+if (!parse_argument()){
+	say "Usage:\n\t $0 --input <input file> [--output {output file}] [--line] [--name {array name}]";
+	say "\t\t if output file is not specified, default name is same with input file name with .h extension";
+	say "Example:\n\t $0 --input bq27320.df.fs";
+	say "\t $0 --input bq27320.df.fs --output bq27320-bqfs-image.h";
+	say "\t $0 --input bq27320.df.fs --output bq27320-bqfs-image.h --line";
+	say "\t $0 --input bq27320.df.fs --output bq27320-bqfs-image.h --name bqfs_image";
+	exit;
+}
+	
+open INPUTFILE, '<', $input_file;
+open OUTPUTFILE, '>', $output_file;
 
-&output_bqfs_img_head;
+&output_title();
+&output_header();
+
+&output_bqfs_img_head();
 $| = 1;
 print "Begin converting";
 
 while(<INPUTFILE>){
-	$line_num = $line_num + 1; 
+	$line_num++; 
 	print ".";
 	chomp();
 	my @line = split(/ /);
 	@line = trim(@line);
 	my $token = shift(@line);
+
 	if($token eq "R:"){
 		&output_bqfs_cmd_read(@line);
 		next;
@@ -199,7 +231,7 @@ while(<INPUTFILE>){
 
 print "Done\n";
 
-&output_bqfs_img_tail;
+&output_bqfs_img_tail();
 
 close INPUTFILE;
 close OUTPUTFILE;
